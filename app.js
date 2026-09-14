@@ -754,22 +754,105 @@
     URL.revokeObjectURL(a.href);
   }
 
-  function importJson(file) {
+  function normalizeIncomingCards(cards) {
+    return cards.map((c) => {
+      const base = emptyCard();
+      return {
+        ...base,
+        ...c,
+        id: c.id || uid(),
+        macros: { ...base.macros, ...(c.macros || {}) },
+        patternTags: Array.isArray(c.patternTags)
+          ? c.patternTags
+          : String(c.patternTags || "")
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean),
+        updatedAt: nowIso(),
+      };
+    });
+  }
+
+  function mergeCards(incoming) {
+    const existingTitles = new Set(
+      state.cards.map((c) => (c.title || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const existingIds = new Set(state.cards.map((c) => c.id));
+    let added = 0;
+    let skipped = 0;
+    normalizeIncomingCards(incoming).forEach((c) => {
+      const titleKey = (c.title || "").trim().toLowerCase();
+      if (existingIds.has(c.id) || (titleKey && existingTitles.has(titleKey))) {
+        skipped += 1;
+        return;
+      }
+      if (!c.id || existingIds.has(c.id)) c.id = uid();
+      state.cards.push(c);
+      existingIds.add(c.id);
+      if (titleKey) existingTitles.add(titleKey);
+      added += 1;
+    });
+    save();
+    render();
+    return { added, skipped };
+  }
+
+  function importJson(file, preferMerge) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result);
         const cards = Array.isArray(parsed.cards) ? parsed.cards : Array.isArray(parsed) ? parsed : null;
         if (!cards) throw new Error("Ungültiges Format");
-        if (!confirm(`Import: ${cards.length} Karten ersetzen die aktuelle Board-Daten?`)) return;
-        state = { cards };
-        save();
-        render();
+        const modeMerge =
+          preferMerge ||
+          parsed.mode === "merge" ||
+          confirm(
+            `${cards.length} Karten laden.\n\nOK = MERGEN (bestehende behalten)\nAbbrechen = Dialog für Ersetzen`
+          );
+        if (modeMerge) {
+          // If user cancelled the confirm above when preferMerge false and mode not merge,
+          // confirm returns false → fall through to replace ask
+        }
+        let doMerge = preferMerge || parsed.mode === "merge";
+        if (!preferMerge && parsed.mode !== "merge") {
+          const choice = confirm(
+            `${cards.length} Karten.\n\nOK = mergen (nichts löschen)\nAbbrechen = komplett ersetzen`
+          );
+          doMerge = choice;
+          if (!choice) {
+            if (!confirm(`Wirklich alle ${state.cards.length} bestehenden Karten durch Import ersetzen?`)) return;
+          }
+        }
+        if (doMerge) {
+          const { added, skipped } = mergeCards(cards);
+          alert(`Merge fertig: ${added} neu, ${skipped} übersprungen (Titel/ID schon da).`);
+        } else {
+          state = { cards: normalizeIncomingCards(cards) };
+          save();
+          render();
+        }
       } catch (err) {
         alert("Import fehlgeschlagen: " + err.message);
       }
     };
     reader.readAsText(file);
+  }
+
+  async function mergeWeekFile(url) {
+    try {
+      const res = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now());
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const parsed = await res.json();
+      const cards = Array.isArray(parsed.cards) ? parsed.cards : null;
+      if (!cards) throw new Error("Keine cards[] in Datei");
+      if (!confirm(`${cards.length} Ideen aus ${parsed.week || "Woche"} mergen? Bestehende Karten bleiben.`)) return;
+      const { added, skipped } = mergeCards(cards);
+      alert(`Merge fertig: ${added} neu, ${skipped} übersprungen.`);
+      setFilter("Idee");
+    } catch (err) {
+      alert("Wochen-Import fehlgeschlagen: " + err.message);
+    }
   }
 
   // ——— Wire up ———
@@ -781,9 +864,13 @@
     document.getElementById("btnExport").addEventListener("click", exportJson);
     document.getElementById("importFile").addEventListener("change", (e) => {
       const f = e.target.files && e.target.files[0];
-      if (f) importJson(f);
+      if (f) importJson(f, false);
       e.target.value = "";
     });
+    const btnWeek = document.getElementById("btnMergeWeek");
+    if (btnWeek) {
+      btnWeek.addEventListener("click", () => mergeWeekFile("woche-2026-09-14-import.json"));
+    }
     document.getElementById("statusFilter").addEventListener("change", () => {
       document.getElementById("statusFilter").dataset.userPicked = "1";
       renderStatusTabs();
