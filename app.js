@@ -469,42 +469,134 @@
   }
 
   // ——— Shopping ———
+  /** Parse "140 g Hähnchen" / "Hähnchen 140g" / "2 Eier" / plain name */
+  function parseShopLine(raw) {
+    let s = String(raw || "").trim().replace(/^[-*•]\s*/, "");
+    if (!s) return null;
+    // range like 2–3 or 2-3 before unit/name
+    let qty = null;
+    let unit = "";
+    let name = s;
+
+    const qtyUnitName = s.match(
+      /^(\d+(?:[.,]\d+)?)(?:\s*[–-]\s*(\d+(?:[.,]\d+)?))?\s*(g|kg|ml|l|EL|TL|Stück|Stk\.?|Blätter|Blatt|Prise|Handvoll)?\s+(.+)$/i
+    );
+    const nameQtyUnit = s.match(
+      /^(.+?)\s+(\d+(?:[.,]\d+)?)(?:\s*[–-]\s*(\d+(?:[.,]\d+)?))?\s*(g|kg|ml|l|EL|TL|Stück|Stk\.?|Blätter|Blatt|Prise|Handvoll)?\s*$/i
+    );
+
+    if (qtyUnitName) {
+      const a = parseFloat(qtyUnitName[1].replace(",", "."));
+      const b = qtyUnitName[2] ? parseFloat(qtyUnitName[2].replace(",", ".")) : null;
+      qty = b != null ? (a + b) / 2 : a; // ranges → mid for sum; display later as sum
+      unit = (qtyUnitName[3] || "").toLowerCase().replace(/stk\.?/i, "stück");
+      name = qtyUnitName[4];
+    } else if (nameQtyUnit) {
+      name = nameQtyUnit[1];
+      const a = parseFloat(nameQtyUnit[2].replace(",", "."));
+      const b = nameQtyUnit[3] ? parseFloat(nameQtyUnit[3].replace(",", ".")) : null;
+      qty = b != null ? (a + b) / 2 : a;
+      unit = (nameQtyUnit[4] || "").toLowerCase().replace(/stk\.?/i, "stück");
+    }
+
+    name = name
+      .replace(/\s+/g, " ")
+      .replace(/[()]/g, "")
+      .trim();
+    const key = name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/ä/g, "ae")
+      .replace(/ö/g, "oe")
+      .replace(/ü/g, "ue")
+      .replace(/ß/g, "ss")
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return { raw: s, name, key, qty, unit };
+  }
+
+  function formatQty(qty, unit) {
+    if (qty == null || Number.isNaN(qty)) return "";
+    const rounded = Math.abs(qty - Math.round(qty)) < 0.05 ? String(Math.round(qty)) : qty.toFixed(1).replace(".", ",");
+    return unit ? `${rounded} ${unit}` : rounded;
+  }
+
   function buildShoppingList() {
-    const lines = [];
-    const seen = new Map();
-    state.cards
-      .filter((c) => SHOP_STATUSES.has(c.status))
-      .forEach((c) => {
-        lines.push(`## ${c.title || "Ohne Titel"} (${c.status})`);
-        const items = (c.shopping || "")
-          .split(/\n/)
-          .map((l) => l.trim())
-          .filter(Boolean);
-        if (!items.length) {
-          lines.push("(keine Shopping-Zeilen)");
+    const cards = state.cards.filter((c) => SHOP_STATUSES.has(c.status));
+    if (!cards.length) return "Keine Karten in Einkauf / Gedreht / Caption final.";
+
+    /** @type {Map<string, { name: string, unit: string, qty: number|null, count: number, extras: string[] }>} */
+    const map = new Map();
+
+    cards.forEach((c) => {
+      (c.shopping || "")
+        .split(/\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+          const p = parseShopLine(line);
+          if (!p || !p.key) return;
+          const unitKey = (p.unit || "").toLowerCase();
+          const mapKey = p.key + "||" + unitKey;
+          const cur = map.get(mapKey);
+          if (!cur) {
+            map.set(mapKey, {
+              name: p.name,
+              unit: p.unit || "",
+              qty: p.qty,
+              count: 1,
+              extras: p.qty == null ? [p.raw] : [],
+            });
+          } else {
+            cur.count += 1;
+            if (p.qty != null && cur.qty != null && cur.unit === (p.unit || "")) {
+              cur.qty += p.qty;
+            } else if (p.qty != null && cur.qty == null) {
+              cur.qty = p.qty;
+              cur.unit = p.unit || cur.unit;
+            } else if (p.qty == null) {
+              cur.extras.push(p.raw);
+            } else if (cur.unit !== (p.unit || "")) {
+              // unit mismatch — keep as extra note
+              cur.extras.push(p.raw);
+            }
+          }
+        });
+    });
+
+    if (!map.size) {
+      return "Karten vorhanden, aber keine Shopping-Zeilen.";
+    }
+
+    const out = ["## Wochen-Einkaufsliste (aggregiert)", ""];
+    [...map.values()]
+      .sort((a, b) => a.name.localeCompare(b.name, "de"))
+      .forEach((v) => {
+        if (v.qty != null) {
+          out.push(`- ${formatQty(v.qty, v.unit)} ${v.name}`.replace(/\s+/g, " ").trim());
+        } else if (v.count > 1) {
+          out.push(`- ${v.name} (×${v.count})`);
         } else {
-          items.forEach((item) => {
-            lines.push("- " + item);
-            const key = item.toLowerCase();
-            seen.set(key, (seen.get(key) || 0) + 1);
-          });
+          out.push(`- ${v.name}`);
         }
-        lines.push("");
+        v.extras.forEach((ex) => {
+          if (ex.toLowerCase() !== v.name.toLowerCase()) out.push(`  · zusätzlich: ${ex}`);
+        });
       });
-    if (!lines.length) return "Keine Karten in Einkauf / Gedreht / Caption final.";
-    const agg = ["## Aggregat (dedup-Hinweis)", ""];
-    [...seen.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0], "de"))
-      .forEach(([k, n]) => {
-        // show original-ish: find first matching line
-        const sample = state.cards
-          .filter((c) => SHOP_STATUSES.has(c.status))
-          .flatMap((c) => (c.shopping || "").split(/\n/))
-          .map((l) => l.trim())
-          .find((l) => l.toLowerCase() === k);
-        agg.push(`- ${sample || k}${n > 1 ? ` (×${n})` : ""}`);
-      });
-    return lines.join("\n") + "\n" + agg.join("\n");
+
+    out.push("", "## Nach Karte (Referenz)", "");
+    cards.forEach((c) => {
+      out.push(`### ${c.title || "Ohne Titel"} (${c.status})`);
+      const items = (c.shopping || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
+      if (!items.length) out.push("(keine Shopping-Zeilen)");
+      else items.forEach((i) => out.push("- " + i));
+      out.push("");
+    });
+
+    return out.join("\n");
   }
 
   function openShop() {
