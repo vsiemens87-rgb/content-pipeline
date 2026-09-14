@@ -20,7 +20,7 @@ Es gibt kein automatisches Posten — Gepostet bleibt manuell.
 
 - Airfryer ja  
 - 3 Drehs/Woche  
-- Fokus: Reispapier / Wrap / Airfryer  
+- Fokus: Reispapier / Wrap / Airfryer / Low Carb / Magerquark / Salate  
 - Cut-Ziel: 65–66 kg bis 31.12.  
 - Käse oft No-Go  
 
