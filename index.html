@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1115" />
+  <title>Content Pipeline — Rezepte</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">CP</span>
+        <div>
+          <h1>Content Pipeline</h1>
+          <p class="sub">Wöchentlicher Social-Rezept-Flow · kein Auto-Post</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" class="btn ghost" id="btnExport" title="JSON exportieren">Export</button>
+        <label class="btn ghost file-label" title="JSON importieren">
+          Import
+          <input type="file" id="importFile" accept="application/json,.json" hidden />
+        </label>
+        <button type="button" class="btn primary" id="btnNew">+ Neu</button>
+      </div>
+    </div>
+    <div class="constraint-note" role="note">
+      <strong>Constraints:</strong> Airfryer ja · 3 Drehs/Woche · Fokus Reispapier / Wrap / Airfryer · Cut 65–66&nbsp;kg / 31.12. · Käse oft No-Go
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="rank-panel" aria-label="Wochen-Ranking">
+      <div class="panel-head">
+        <h2>Rank Woche</h2>
+        <span class="hint">1–7 · Top-Slots</span>
+      </div>
+      <ol id="rankList" class="rank-list"></ol>
+    </section>
+
+    <section class="kanban-wrap" aria-label="Kanban">
+      <div class="kanban-toolbar">
+        <label class="filter-label">
+          Status-Filter
+          <select id="statusFilter">
+            <option value="all">Alle Spalten</option>
+          </select>
+        </label>
+        <button type="button" class="btn ghost sm" id="btnShopping">Wochen-Einkaufsliste</button>
+      </div>
+      <div id="kanban" class="kanban"></div>
+    </section>
+  </main>
+
+  <!-- Detail / Edit Modal -->
+  <dialog id="cardModal" class="modal">
+    <form method="dialog" id="cardForm" class="modal-body">
+      <header class="modal-head">
+        <h2 id="modalTitle">Karte</h2>
+        <button type="button" class="icon-btn" id="btnCloseModal" aria-label="Schließen">×</button>
+      </header>
+      <div class="modal-grid" id="modalFields"></div>
+      <footer class="modal-foot">
+        <div class="foot-left">
+          <button type="button" class="btn danger ghost" id="btnKill">Kill</button>
+          <button type="button" class="btn ghost" id="btnDelete">Löschen</button>
+        </div>
+        <div class="foot-right">
+          <button type="button" class="btn ghost" id="btnCancel">Abbrechen</button>
+          <button type="submit" class="btn primary" id="btnSave">Speichern</button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Kill reason -->
+  <dialog id="killModal" class="modal sm">
+    <form method="dialog" id="killForm" class="modal-body">
+      <header class="modal-head">
+        <h2>Kill — Begründung</h2>
+        <button type="button" class="icon-btn" id="btnCloseKill" aria-label="Schließen">×</button>
+      </header>
+      <label class="field">
+        <span>Warum killen?</span>
+        <textarea id="killReasonInput" rows="3" required placeholder="z. B. zu käsig / nicht cut-fit / zu lang"></textarea>
+      </label>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" id="btnCancelKill">Abbrechen</button>
+        <button type="submit" class="btn danger">Kill bestätigen</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Shopping list -->
+  <dialog id="shopModal" class="modal">
+    <div class="modal-body">
+      <header class="modal-head">
+        <h2>Wochen-Einkaufsliste</h2>
+        <button type="button" class="icon-btn" id="btnCloseShop" aria-label="Schließen">×</button>
+      </header>
+      <p class="hint-block">Aggregiert aus Status <strong>Einkauf</strong>, <strong>Gedreht</strong>, <strong>Caption final</strong> (ohne Kill).</p>
+      <pre id="shopList" class="shop-pre"></pre>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" id="btnCopyShop">Kopieren</button>
+        <button type="button" class="btn primary" id="btnCloseShop2">OK</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <script src="seed.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
