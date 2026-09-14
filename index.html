@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0f1115" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Content Pipeline — Rezepte</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -50,6 +51,7 @@
         </label>
         <button type="button" class="btn ghost sm" id="btnShopping">Wochen-Einkaufsliste</button>
       </div>
+      <div id="statusTabs" class="status-tabs" role="tablist" aria-label="Status"></div>
       <div id="kanban" class="kanban"></div>
     </section>
   </main>
@@ -82,7 +84,7 @@
         <h2>Kill — Begründung</h2>
         <button type="button" class="icon-btn" id="btnCloseKill" aria-label="Schließen">×</button>
       </header>
-      <label class="field">
+      <label class="field" style="padding: 14px 16px;">
         <span>Warum killen?</span>
         <textarea id="killReasonInput" rows="3" required placeholder="z. B. zu käsig / nicht cut-fit / zu lang"></textarea>
       </label>
@@ -100,10 +102,15 @@
         <h2>Wochen-Einkaufsliste</h2>
         <button type="button" class="icon-btn" id="btnCloseShop" aria-label="Schließen">×</button>
       </header>
-      <p class="hint-block">Aggregiert aus Status <strong>Einkauf</strong>, <strong>Gedreht</strong>, <strong>Caption final</strong> (ohne Kill).</p>
-      <pre id="shopList" class="shop-pre"></pre>
+      <p class="hint-block">Aggregiert aus Status <strong>Einkauf</strong>, <strong>Gedreht</strong>, <strong>Caption final</strong> (ohne Kill). Haken bleiben in dieser Session (localStorage).</p>
+      <p class="shop-section-title">Aggregiert</p>
+      <ul id="shopCheckList" class="shop-list" aria-label="Einkaufsliste"></ul>
+      <pre id="shopList" class="shop-pre" hidden></pre>
       <footer class="modal-foot">
-        <button type="button" class="btn ghost" id="btnCopyShop">Kopieren</button>
+        <div class="shop-actions-extra">
+          <button type="button" class="btn ghost" id="btnClearShopChecks">Haken reset</button>
+          <button type="button" class="btn ghost" id="btnCopyShop">Kopieren</button>
+        </div>
         <button type="button" class="btn primary" id="btnCloseShop2">OK</button>
       </footer>
     </div>

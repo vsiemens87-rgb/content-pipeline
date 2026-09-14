@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "content_pipeline_v1";
+  const SHOP_CHECKS_KEY = "content_pipeline_shop_checks";
   const STATUSES = [
     "Idee",
     "PT",
@@ -109,8 +110,25 @@
       .replace(/"/g, "&quot;");
   }
 
+  function isMobile() {
+    return window.matchMedia("(max-width: 767px)").matches;
+  }
+
+  function getFilter() {
+    const sel = document.getElementById("statusFilter");
+    return sel ? sel.value || "all" : "all";
+  }
+
+  function setFilter(value, rerender) {
+    const sel = document.getElementById("statusFilter");
+    if (sel) sel.value = value;
+    renderStatusTabs();
+    if (rerender !== false) renderKanban();
+  }
+
   function render() {
     renderFilter();
+    renderStatusTabs();
     renderRank();
     renderKanban();
   }
@@ -121,7 +139,42 @@
     sel.innerHTML =
       '<option value="all">Alle Spalten</option>' +
       STATUSES.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
-    sel.value = STATUSES.includes(cur) || cur === "all" ? cur : "all";
+    let next = STATUSES.includes(cur) || cur === "all" ? cur : "all";
+    // Mobile: default to one column (Idee) instead of cramped "all"
+    if (isMobile() && next === "all" && !sel.dataset.userPicked) {
+      next = "Idee";
+    }
+    sel.value = next;
+  }
+
+  function renderStatusTabs() {
+    const root = document.getElementById("statusTabs");
+    if (!root) return;
+    const cur = getFilter();
+    const counts = Object.fromEntries(STATUSES.map((s) => [s, 0]));
+    state.cards.forEach((c) => {
+      if (counts[c.status] != null) counts[c.status]++;
+    });
+    const tabs = [{ value: "all", label: "Alle", count: state.cards.length }].concat(
+      STATUSES.map((s) => ({ value: s, label: s, count: counts[s] }))
+    );
+    root.innerHTML = tabs
+      .map(
+        (t) => `
+      <button type="button" class="status-tab" role="tab"
+        data-status="${escapeHtml(t.value)}"
+        aria-selected="${cur === t.value ? "true" : "false"}">
+        ${escapeHtml(t.label)}<span class="tab-count">${t.count}</span>
+      </button>`
+      )
+      .join("");
+    root.querySelectorAll(".status-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sel = document.getElementById("statusFilter");
+        if (sel) sel.dataset.userPicked = "1";
+        setFilter(btn.dataset.status);
+      });
+    });
   }
 
   function renderRank() {
@@ -159,9 +212,12 @@
   }
 
   function renderKanban() {
-    const filter = document.getElementById("statusFilter").value;
+    const filter = getFilter();
+    const mobile = isMobile();
+    // Mobile + Alle → stacked full-width sections; else one column via tab
     const cols = filter === "all" ? STATUSES : [filter];
     const root = document.getElementById("kanban");
+    root.classList.toggle("is-stacked", mobile && filter === "all");
     root.innerHTML = cols
       .map((status) => {
         const cards = state.cards.filter((c) => c.status === status);
@@ -181,7 +237,7 @@
 
     root.querySelectorAll(".card").forEach((el) => {
       el.addEventListener("click", (e) => {
-        if (e.target.closest("[data-move]")) return;
+        if (e.target.closest("[data-move]") || e.target.closest("[data-status-select]")) return;
         openEdit(el.dataset.id);
       });
     });
@@ -189,6 +245,13 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         moveStatus(btn.closest(".card").dataset.id, btn.dataset.move);
+      });
+    });
+    root.querySelectorAll("[data-status-select]").forEach((sel) => {
+      sel.addEventListener("click", (e) => e.stopPropagation());
+      sel.addEventListener("change", (e) => {
+        e.stopPropagation();
+        moveStatus(sel.closest(".card").dataset.id, sel.value);
       });
     });
   }
@@ -218,6 +281,12 @@
         <div class="status-btns">
           ${prev ? `<button type="button" data-move="${escapeHtml(prev)}">← ${escapeHtml(prev)}</button>` : ""}
           ${next && next !== "Kill" ? `<button type="button" data-move="${escapeHtml(next)}">${escapeHtml(next)} →</button>` : ""}
+        </div>
+        <div class="card-status-row">
+          <label for="st-${escapeHtml(c.id)}">Status</label>
+          <select id="st-${escapeHtml(c.id)}" data-status-select aria-label="Status ändern">
+            ${STATUSES.map((s) => `<option value="${escapeHtml(s)}" ${s === c.status ? "selected" : ""}>${escapeHtml(s)}</option>`).join("")}
+          </select>
         </div>
       </article>`;
   }
@@ -524,11 +593,9 @@
     return unit ? `${rounded} ${unit}` : rounded;
   }
 
-  function buildShoppingList() {
+  function aggregateShoppingMap() {
     const cards = state.cards.filter((c) => SHOP_STATUSES.has(c.status));
-    if (!cards.length) return "Keine Karten in Einkauf / Gedreht / Caption final.";
-
-    /** @type {Map<string, { name: string, unit: string, qty: number|null, count: number, extras: string[] }>} */
+    /** @type {Map<string, { id: string, name: string, unit: string, qty: number|null, count: number, extras: string[], label: string }>} */
     const map = new Map();
 
     cards.forEach((c) => {
@@ -544,11 +611,13 @@
           const cur = map.get(mapKey);
           if (!cur) {
             map.set(mapKey, {
+              id: mapKey,
               name: p.name,
               unit: p.unit || "",
               qty: p.qty,
               count: 1,
               extras: p.qty == null ? [p.raw] : [],
+              label: "",
             });
           } else {
             cur.count += 1;
@@ -560,48 +629,119 @@
             } else if (p.qty == null) {
               cur.extras.push(p.raw);
             } else if (cur.unit !== (p.unit || "")) {
-              // unit mismatch — keep as extra note
               cur.extras.push(p.raw);
             }
           }
         });
     });
 
-    if (!map.size) {
-      return "Karten vorhanden, aber keine Shopping-Zeilen.";
-    }
+    const items = [...map.values()]
+      .sort((a, b) => a.name.localeCompare(b.name, "de"))
+      .map((v) => {
+        let label;
+        if (v.qty != null) {
+          label = `${formatQty(v.qty, v.unit)} ${v.name}`.replace(/\s+/g, " ").trim();
+        } else if (v.count > 1) {
+          label = `${v.name} (×${v.count})`;
+        } else {
+          label = v.name;
+        }
+        if (v.extras.length) {
+          const extra = v.extras
+            .filter((ex) => ex.toLowerCase() !== v.name.toLowerCase())
+            .join("; ");
+          if (extra) label += ` · zusätzlich: ${extra}`;
+        }
+        return { ...v, label };
+      });
+
+    return { cards, items };
+  }
+
+  function buildShoppingList() {
+    const { cards, items } = aggregateShoppingMap();
+    if (!cards.length) return "Keine Karten in Einkauf / Gedreht / Caption final.";
+    if (!items.length) return "Karten vorhanden, aber keine Shopping-Zeilen.";
 
     const out = ["## Wochen-Einkaufsliste (aggregiert)", ""];
-    [...map.values()]
-      .sort((a, b) => a.name.localeCompare(b.name, "de"))
-      .forEach((v) => {
-        if (v.qty != null) {
-          out.push(`- ${formatQty(v.qty, v.unit)} ${v.name}`.replace(/\s+/g, " ").trim());
-        } else if (v.count > 1) {
-          out.push(`- ${v.name} (×${v.count})`);
-        } else {
-          out.push(`- ${v.name}`);
-        }
-        v.extras.forEach((ex) => {
-          if (ex.toLowerCase() !== v.name.toLowerCase()) out.push(`  · zusätzlich: ${ex}`);
-        });
-      });
+    items.forEach((v) => out.push("- " + v.label));
 
     out.push("", "## Nach Karte (Referenz)", "");
     cards.forEach((c) => {
       out.push(`### ${c.title || "Ohne Titel"} (${c.status})`);
-      const items = (c.shopping || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
-      if (!items.length) out.push("(keine Shopping-Zeilen)");
-      else items.forEach((i) => out.push("- " + i));
+      const lines = (c.shopping || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
+      if (!lines.length) out.push("(keine Shopping-Zeilen)");
+      else lines.forEach((i) => out.push("- " + i));
       out.push("");
     });
 
     return out.join("\n");
   }
 
+  function loadShopChecks() {
+    try {
+      return JSON.parse(localStorage.getItem(SHOP_CHECKS_KEY) || "{}") || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveShopChecks(obj) {
+    localStorage.setItem(SHOP_CHECKS_KEY, JSON.stringify(obj));
+  }
+
+  function renderShopChecklist() {
+    const ul = document.getElementById("shopCheckList");
+    const { cards, items } = aggregateShoppingMap();
+    const checks = loadShopChecks();
+    if (!cards.length) {
+      ul.innerHTML = '<li class="shop-item"><span class="shop-label">Keine Karten in Einkauf / Gedreht / Caption final.</span></li>';
+      return;
+    }
+    if (!items.length) {
+      ul.innerHTML = '<li class="shop-item"><span class="shop-label">Karten vorhanden, aber keine Shopping-Zeilen.</span></li>';
+      return;
+    }
+    ul.innerHTML = items
+      .map((it) => {
+        const checked = !!checks[it.id];
+        return `
+        <li class="shop-item ${checked ? "is-checked" : ""}">
+          <input type="checkbox" data-shop-id="${escapeHtml(it.id)}" ${checked ? "checked" : ""} aria-label="${escapeHtml(it.label)}" />
+          <span class="shop-label">${escapeHtml(it.label)}</span>
+        </li>`;
+      })
+      .join("");
+
+    ul.querySelectorAll("input[data-shop-id]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const all = loadShopChecks();
+        if (input.checked) all[input.dataset.shopId] = true;
+        else delete all[input.dataset.shopId];
+        saveShopChecks(all);
+        input.closest(".shop-item").classList.toggle("is-checked", input.checked);
+      });
+    });
+    ul.querySelectorAll(".shop-item").forEach((li) => {
+      li.addEventListener("click", (e) => {
+        if (e.target.tagName === "INPUT") return;
+        const cb = li.querySelector("input[type=checkbox]");
+        if (!cb) return;
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event("change"));
+      });
+    });
+  }
+
   function openShop() {
     document.getElementById("shopList").textContent = buildShoppingList();
+    renderShopChecklist();
     document.getElementById("shopModal").showModal();
+  }
+
+  function clearShopChecks() {
+    saveShopChecks({});
+    renderShopChecklist();
   }
 
   // ——— Import / Export ———
@@ -644,8 +784,21 @@
       if (f) importJson(f);
       e.target.value = "";
     });
-    document.getElementById("statusFilter").addEventListener("change", renderKanban);
+    document.getElementById("statusFilter").addEventListener("change", () => {
+      document.getElementById("statusFilter").dataset.userPicked = "1";
+      renderStatusTabs();
+      renderKanban();
+    });
     document.getElementById("btnShopping").addEventListener("click", openShop);
+    document.getElementById("btnClearShopChecks").addEventListener("click", clearShopChecks);
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        renderStatusTabs();
+        renderKanban();
+      }, 150);
+    });
 
     document.getElementById("cardForm").addEventListener("submit", saveFromForm);
     document.getElementById("btnCloseModal").addEventListener("click", () => document.getElementById("cardModal").close());
