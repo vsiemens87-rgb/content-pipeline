@@ -773,20 +773,36 @@
     });
   }
 
-  function mergeCards(incoming) {
+  function mergeCards(incoming, opts) {
+    const weekMerge = !!(opts && opts.weekMerge);
     const existingTitles = new Set(
       state.cards.map((c) => (c.title || "").trim().toLowerCase()).filter(Boolean)
     );
     const existingIds = new Set(state.cards.map((c) => c.id));
     let added = 0;
     let skipped = 0;
+    let unranked = 0;
     normalizeIncomingCards(incoming).forEach((c) => {
       const titleKey = (c.title || "").trim().toLowerCase();
       if (existingIds.has(c.id) || (titleKey && existingTitles.has(titleKey))) {
+        // Week merge: if already present with a rank, clear rank so Valentin re-ranks
+        if (weekMerge && titleKey) {
+          const hit = state.cards.find((x) => (x.title || "").trim().toLowerCase() === titleKey);
+          if (hit && hit.rank != null) {
+            hit.rank = null;
+            hit.status = hit.status === "Kill" ? hit.status : "Idee";
+            hit.updatedAt = nowIso();
+            unranked += 1;
+          }
+        }
         skipped += 1;
         return;
       }
       if (!c.id || existingIds.has(c.id)) c.id = uid();
+      if (weekMerge) {
+        c.rank = null;
+        c.status = "Idee";
+      }
       state.cards.push(c);
       existingIds.add(c.id);
       if (titleKey) existingTitles.add(titleKey);
@@ -794,7 +810,7 @@
     });
     save();
     render();
-    return { added, skipped };
+    return { added, skipped, unranked };
   }
 
   function importJson(file, preferMerge) {
@@ -825,8 +841,9 @@
           }
         }
         if (doMerge) {
-          const { added, skipped } = mergeCards(cards);
-          alert(`Merge fertig: ${added} neu, ${skipped} übersprungen (Titel/ID schon da).`);
+          const weekMerge = parsed.week || parsed.mode === "merge";
+          const { added, skipped, unranked } = mergeCards(cards, { weekMerge: !!parsed.week });
+          alert(`Merge fertig: ${added} neu, ${skipped} übersprungen` + (unranked ? `, ${unranked} Ranks geleert` : "") + `.`);
         } else {
           state = { cards: normalizeIncomingCards(cards) };
           save();
@@ -847,8 +864,8 @@
       const cards = Array.isArray(parsed.cards) ? parsed.cards : null;
       if (!cards) throw new Error("Keine cards[] in Datei");
       if (!confirm(`${cards.length} Ideen aus ${parsed.week || "Woche"} mergen? Bestehende Karten bleiben.`)) return;
-      const { added, skipped } = mergeCards(cards);
-      alert(`Merge fertig: ${added} neu, ${skipped} übersprungen.`);
+      const { added, skipped, unranked } = mergeCards(cards, { weekMerge: true });
+      alert(`Merge fertig: ${added} neu, ${skipped} übersprungen` + (unranked ? `, ${unranked} Ranks geleert` : "") + `.`);
       setFilter("Idee");
     } catch (err) {
       alert("Wochen-Import fehlgeschlagen: " + err.message);
