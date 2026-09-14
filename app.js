@@ -856,20 +856,43 @@
     reader.readAsText(file);
   }
 
-  async function mergeWeekFile(url) {
+  async function fetchWeekCards(url) {
+    const res = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now());
+    if (!res.ok) throw new Error(url + " → HTTP " + res.status);
+    const parsed = await res.json();
+    const cards = Array.isArray(parsed.cards) ? parsed.cards : Array.isArray(parsed) ? null : null;
+    if (!cards) throw new Error(url + ": keine cards[]");
+    return { week: parsed.week || "", cards, url };
+  }
+
+  /** Merge one or many week JSON files (fixed name no longer required). */
+  async function mergeWeekFiles(urls) {
+    const list = Array.isArray(urls) ? urls : [urls];
     try {
-      const res = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now());
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const parsed = await res.json();
-      const cards = Array.isArray(parsed.cards) ? parsed.cards : null;
-      if (!cards) throw new Error("Keine cards[] in Datei");
-      if (!confirm(`${cards.length} Ideen aus ${parsed.week || "Woche"} mergen? Bestehende Karten bleiben.`)) return;
-      const { added, skipped, unranked } = mergeCards(cards, { weekMerge: true });
+      const parts = [];
+      for (const u of list) {
+        try {
+          parts.push(await fetchWeekCards(u));
+        } catch (e) {
+          console.warn(e);
+          // optional follow-up files may be missing
+          if (list.length === 1) throw e;
+        }
+      }
+      if (!parts.length) throw new Error("Keine Wochen-Dateien geladen");
+      const all = parts.flatMap((p) => p.cards);
+      const label = parts.map((p) => p.week || p.url.split("/").pop()).join(" + ");
+      if (!confirm(`${all.length} Ideen mergen (${label})? Bestehende Karten bleiben, Ranks bleiben leer.`)) return;
+      const { added, skipped, unranked } = mergeCards(all, { weekMerge: true });
       alert(`Merge fertig: ${added} neu, ${skipped} übersprungen` + (unranked ? `, ${unranked} Ranks geleert` : "") + `.`);
       setFilter("Idee");
     } catch (err) {
       alert("Wochen-Import fehlgeschlagen: " + err.message);
     }
+  }
+
+  async function mergeWeekFile(url) {
+    return mergeWeekFiles(url);
   }
 
   // ——— Wire up ———
@@ -886,7 +909,12 @@
     });
     const btnWeek = document.getElementById("btnMergeWeek");
     if (btnWeek) {
-      btnWeek.addEventListener("click", () => mergeWeekFile("woche-2026-09-14-import.json"));
+      btnWeek.addEventListener("click", () =>
+        mergeWeekFiles([
+          "woche-2026-09-14-import.json",
+          "woche-2026-09-14-nachzug-quark-import.json",
+        ])
+      );
     }
     document.getElementById("statusFilter").addEventListener("change", () => {
       document.getElementById("statusFilter").dataset.userPicked = "1";
