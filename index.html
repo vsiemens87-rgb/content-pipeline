@@ -2,70 +2,150 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1115" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="color-scheme" content="dark" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Content Pipeline — Rezepte</title>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Pipeline" />
+  <meta name="description" content="Wöchentlicher Social-Rezept Content Pipeline" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <title>Content Pipeline</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <span class="brand-mark">CP</span>
-        <div>
-          <h1>Content Pipeline</h1>
-          <p class="sub">Wöchentlicher Social-Rezept-Flow · kein Auto-Post</p>
+  <div class="phone-shell">
+    <header class="app-topbar">
+      <div class="topbar-row">
+        <div class="brand-block">
+          <span class="brand-mark" aria-hidden="true">CP</span>
+          <div class="brand-text">
+            <h1 id="viewTitle">Board</h1>
+            <p class="sub" id="viewSub">Status-Flow · lokal</p>
+          </div>
         </div>
+        <button type="button" class="fab-new" id="btnNew" aria-label="Neue Karte">
+          <span class="fab-plus">+</span>
+        </button>
       </div>
-      <div class="topbar-actions">
-        <button type="button" class="btn ghost" id="btnExport" title="JSON exportieren">Export</button>
-        <label class="btn ghost file-label" title="JSON importieren (Merge oder Ersetzen)">
-          Import
-          <input type="file" id="importFile" accept="application/json,.json" hidden />
-        </label>
-        <button type="button" class="btn ghost" id="btnMergeWeek" title="Wochen-Ideen mergen (inkl. Nachzüge, ohne Ranks)">Woche mergen</button>
-        <button type="button" class="btn primary" id="btnNew">+ Neu</button>
+      <div class="constraint-pill" role="note" id="constraintPill">
+        <span class="pill-dot"></span>
+        Airfryer · 3 Drehs/Wo · Cut 65–66 kg · Käse oft No-Go
       </div>
-    </div>
-    <div class="constraint-note" role="note">
-      <strong>Constraints:</strong> Airfryer ja · 3 Drehs/Woche · Fokus Reispapier / Wrap / Airfryer / Low Carb / Magerquark / Salate · Cut 65–66&nbsp;kg / 31.12. · Käse oft No-Go
-    </div>
-  </header>
+    </header>
 
-  <main class="layout">
-    <section class="rank-panel" aria-label="Wochen-Ranking">
-      <div class="panel-head">
-        <h2>Rank Woche</h2>
-        <span class="hint">1–7 · Top-Slots</span>
-      </div>
-      <ol id="rankList" class="rank-list"></ol>
-    </section>
+    <main class="app-main">
+      <!-- BOARD -->
+      <section class="view view-board is-active" id="viewBoard" data-view="board" aria-label="Board">
+        <div class="status-chips-wrap">
+          <div id="statusTabs" class="status-tabs" role="tablist" aria-label="Status"></div>
+        </div>
+        <label class="sr-only" for="statusFilter">Status-Filter</label>
+        <select id="statusFilter" class="sr-only" tabindex="-1" aria-hidden="true">
+          <option value="all">Alle</option>
+        </select>
+        <div id="kanban" class="kanban"></div>
+      </section>
 
-    <section class="kanban-wrap" aria-label="Kanban">
-      <div class="kanban-toolbar">
-        <label class="filter-label">
-          Status-Filter
-          <select id="statusFilter">
-            <option value="all">Alle Spalten</option>
-          </select>
-        </label>
-        <button type="button" class="btn ghost sm" id="btnShopping">Wochen-Einkaufsliste</button>
-      </div>
-      <div id="statusTabs" class="status-tabs" role="tablist" aria-label="Status"></div>
-      <div id="kanban" class="kanban"></div>
-    </section>
-  </main>
+      <!-- RANK -->
+      <section class="view view-rank" id="viewRank" data-view="rank" aria-label="Ranking" hidden>
+        <div class="panel-card">
+          <div class="panel-head">
+            <h2>Rank Woche</h2>
+            <span class="hint">1–7 · Top-Slots</span>
+          </div>
+          <ol id="rankList" class="rank-list"></ol>
+        </div>
+      </section>
 
-  <!-- Detail / Edit Modal -->
-  <dialog id="cardModal" class="modal">
-    <form method="dialog" id="cardForm" class="modal-body">
-      <header class="modal-head">
+      <!-- EINKAUF (full view, not modal) -->
+      <section class="view view-shop" id="viewShop" data-view="shop" aria-label="Einkauf" hidden>
+        <div class="panel-card shop-panel">
+          <p class="hint-block tight">
+            Aggregiert aus <strong>Einkauf</strong>, <strong>Gedreht</strong>, <strong>Caption final</strong> (ohne Kill). Haken bleiben in dieser Session.
+          </p>
+          <p class="shop-section-title">Aggregiert</p>
+          <ul id="shopCheckList" class="shop-list" aria-label="Einkaufsliste"></ul>
+          <pre id="shopList" class="shop-pre" hidden></pre>
+          <div class="shop-toolbar">
+            <button type="button" class="btn ghost" id="btnClearShopChecks">Haken reset</button>
+            <button type="button" class="btn ghost" id="btnCopyShop">Kopieren</button>
+          </div>
+        </div>
+        <!-- Keep IDs for legacy close wiring (no-op / hidden) -->
+        <button type="button" id="btnCloseShop" class="sr-only" tabindex="-1" aria-hidden="true">Schließen</button>
+        <button type="button" id="btnCloseShop2" class="sr-only" tabindex="-1" aria-hidden="true">OK</button>
+        <button type="button" id="btnShopping" class="sr-only" tabindex="-1" aria-hidden="true">Shopping</button>
+      </section>
+
+      <!-- MEHR -->
+      <section class="view view-more" id="viewMore" data-view="more" aria-label="Mehr" hidden>
+        <div class="panel-card">
+          <h2 class="more-heading">Daten</h2>
+          <div class="more-actions">
+            <button type="button" class="btn row-btn" id="btnExport">
+              <span class="row-icon">↓</span>
+              <span class="row-label">Export JSON</span>
+            </button>
+            <label class="btn row-btn file-label">
+              <span class="row-icon">↑</span>
+              <span class="row-label">Import (Merge / Ersetzen)</span>
+              <input type="file" id="importFile" accept="application/json,.json" hidden />
+            </label>
+            <button type="button" class="btn row-btn" id="btnMergeWeek">
+              <span class="row-icon">↻</span>
+              <span class="row-label">Woche mergen</span>
+            </button>
+          </div>
+        </div>
+        <div class="panel-card">
+          <h2 class="more-heading">Constraints</h2>
+          <ul class="constraint-list">
+            <li>Airfryer ja</li>
+            <li>3 Drehs / Woche</li>
+            <li>Fokus: Reispapier / Wrap / Airfryer / Low Carb / Magerquark / Salate</li>
+            <li>Cut 65–66 kg · Ziel 31.12.</li>
+            <li>Käse oft No-Go</li>
+          </ul>
+        </div>
+        <p class="more-foot">Content Pipeline · lokal in localStorage</p>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" role="tablist" aria-label="Hauptnavigation">
+      <button type="button" class="nav-item is-active" data-nav="board" role="tab" aria-selected="true">
+        <span class="nav-ico" aria-hidden="true">▦</span>
+        <span class="nav-label">Board</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="rank" role="tab" aria-selected="false">
+        <span class="nav-ico" aria-hidden="true">#</span>
+        <span class="nav-label">Rank</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="shop" role="tab" aria-selected="false">
+        <span class="nav-ico" aria-hidden="true">🛒</span>
+        <span class="nav-label">Einkauf</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="more" role="tab" aria-selected="false">
+        <span class="nav-ico" aria-hidden="true">···</span>
+        <span class="nav-label">Mehr</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Detail fullscreen sheet -->
+  <dialog id="cardModal" class="sheet">
+    <form method="dialog" id="cardForm" class="sheet-body">
+      <header class="sheet-head">
+        <button type="button" class="icon-btn back" id="btnCloseModal" aria-label="Zurück">‹</button>
         <h2 id="modalTitle">Karte</h2>
-        <button type="button" class="icon-btn" id="btnCloseModal" aria-label="Schließen">×</button>
+        <span class="sheet-head-spacer"></span>
       </header>
-      <div class="modal-grid" id="modalFields"></div>
-      <footer class="modal-foot">
+      <div class="sheet-scroll">
+        <div class="modal-grid" id="modalFields"></div>
+      </div>
+      <footer class="sheet-foot">
         <div class="foot-left">
           <button type="button" class="btn danger ghost" id="btnKill">Kill</button>
           <button type="button" class="btn ghost" id="btnDelete">Löschen</button>
@@ -78,44 +158,29 @@
     </form>
   </dialog>
 
-  <!-- Kill reason -->
-  <dialog id="killModal" class="modal sm">
-    <form method="dialog" id="killForm" class="modal-body">
-      <header class="modal-head">
+  <!-- Kill reason sheet -->
+  <dialog id="killModal" class="sheet sheet-sm">
+    <form method="dialog" id="killForm" class="sheet-body">
+      <header class="sheet-head">
+        <button type="button" class="icon-btn back" id="btnCloseKill" aria-label="Schließen">‹</button>
         <h2>Kill — Begründung</h2>
-        <button type="button" class="icon-btn" id="btnCloseKill" aria-label="Schließen">×</button>
+        <span class="sheet-head-spacer"></span>
       </header>
-      <label class="field" style="padding: 14px 16px;">
-        <span>Warum killen?</span>
-        <textarea id="killReasonInput" rows="3" required placeholder="z. B. zu käsig / nicht cut-fit / zu lang"></textarea>
-      </label>
-      <footer class="modal-foot">
+      <div class="sheet-scroll">
+        <label class="field" style="padding: 14px 16px;">
+          <span>Warum killen?</span>
+          <textarea id="killReasonInput" rows="3" required placeholder="z. B. zu käsig / nicht cut-fit / zu lang"></textarea>
+        </label>
+      </div>
+      <footer class="sheet-foot">
         <button type="button" class="btn ghost" id="btnCancelKill">Abbrechen</button>
         <button type="submit" class="btn danger">Kill bestätigen</button>
       </footer>
     </form>
   </dialog>
 
-  <!-- Shopping list -->
-  <dialog id="shopModal" class="modal">
-    <div class="modal-body">
-      <header class="modal-head">
-        <h2>Wochen-Einkaufsliste</h2>
-        <button type="button" class="icon-btn" id="btnCloseShop" aria-label="Schließen">×</button>
-      </header>
-      <p class="hint-block">Aggregiert aus Status <strong>Einkauf</strong>, <strong>Gedreht</strong>, <strong>Caption final</strong> (ohne Kill). Haken bleiben in dieser Session (localStorage).</p>
-      <p class="shop-section-title">Aggregiert</p>
-      <ul id="shopCheckList" class="shop-list" aria-label="Einkaufsliste"></ul>
-      <pre id="shopList" class="shop-pre" hidden></pre>
-      <footer class="modal-foot">
-        <div class="shop-actions-extra">
-          <button type="button" class="btn ghost" id="btnClearShopChecks">Haken reset</button>
-          <button type="button" class="btn ghost" id="btnCopyShop">Kopieren</button>
-        </div>
-        <button type="button" class="btn primary" id="btnCloseShop2">OK</button>
-      </footer>
-    </div>
-  </dialog>
+  <!-- Legacy shop modal shell (hidden; shopping lives in view) -->
+  <dialog id="shopModal" class="sheet" hidden aria-hidden="true"></dialog>
 
   <script src="seed.js"></script>
   <script src="app.js"></script>

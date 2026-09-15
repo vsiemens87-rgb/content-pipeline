@@ -111,7 +111,8 @@
   }
 
   function isMobile() {
-    return window.matchMedia("(max-width: 767px)").matches;
+    // Phone-shell UX: always one-column board; desktop uses centered phone frame
+    return true;
   }
 
   function getFilter() {
@@ -140,10 +141,6 @@
       '<option value="all">Alle Spalten</option>' +
       STATUSES.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
     let next = STATUSES.includes(cur) || cur === "all" ? cur : "all";
-    // Mobile: default to one column (Idee) instead of cramped "all"
-    if (isMobile() && next === "all" && !sel.dataset.userPicked) {
-      next = "Idee";
-    }
     sel.value = next;
   }
 
@@ -214,10 +211,15 @@
   function renderKanban() {
     const filter = getFilter();
     const mobile = isMobile();
-    // Mobile + Alle → stacked full-width sections; else one column via tab
-    const cols = filter === "all" ? STATUSES : [filter];
+    // Alle → stacked sections; hide empty columns so Board isn't mostly "Leer"
+    let cols = filter === "all" ? STATUSES : [filter];
+    if (filter === "all") {
+      const nonempty = STATUSES.filter((s) => state.cards.some((c) => c.status === s));
+      cols = nonempty.length ? nonempty : ["Idee"];
+    }
     const root = document.getElementById("kanban");
     root.classList.toggle("is-stacked", mobile && filter === "all");
+    root.classList.toggle("show-heads", filter === "all");
     root.innerHTML = cols
       .map((status) => {
         const cards = state.cards.filter((c) => c.status === status);
@@ -736,7 +738,48 @@
   function openShop() {
     document.getElementById("shopList").textContent = buildShoppingList();
     renderShopChecklist();
-    document.getElementById("shopModal").showModal();
+    switchView("shop");
+  }
+
+  const VIEW_META = {
+    board: { title: "Board", sub: "Status-Flow · lokal" },
+    rank: { title: "Rank", sub: "Top-Slots 1–7" },
+    shop: { title: "Einkauf", sub: "Wochenliste aggregiert" },
+    more: { title: "Mehr", sub: "Import · Export · Constraints" },
+  };
+
+  function switchView(name) {
+    const views = document.querySelectorAll(".view");
+    views.forEach((v) => {
+      const on = v.dataset.view === name;
+      v.classList.toggle("is-active", on);
+      if (on) v.removeAttribute("hidden");
+      else v.setAttribute("hidden", "");
+    });
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      const on = btn.dataset.nav === name;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    const meta = VIEW_META[name] || VIEW_META.board;
+    const titleEl = document.getElementById("viewTitle");
+    const subEl = document.getElementById("viewSub");
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subEl) subEl.textContent = meta.sub;
+    const pill = document.getElementById("constraintPill");
+    if (pill) pill.hidden = name === "more";
+    if (name === "shop") {
+      document.getElementById("shopList").textContent = buildShoppingList();
+      renderShopChecklist();
+    }
+    if (name === "rank") renderRank();
+    if (name === "board") {
+      renderStatusTabs();
+      renderKanban();
+    }
+    // scroll main to top
+    const main = document.querySelector(".app-main");
+    if (main) main.scrollTop = 0;
   }
 
   function clearShopChecks() {
@@ -921,7 +964,8 @@
       renderStatusTabs();
       renderKanban();
     });
-    document.getElementById("btnShopping").addEventListener("click", openShop);
+    const btnShop = document.getElementById("btnShopping");
+    if (btnShop) btnShop.addEventListener("click", openShop);
     document.getElementById("btnClearShopChecks").addEventListener("click", clearShopChecks);
     let resizeTimer = null;
     window.addEventListener("resize", () => {
@@ -930,6 +974,10 @@
         renderStatusTabs();
         renderKanban();
       }, 150);
+    });
+
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => switchView(btn.dataset.nav));
     });
 
     document.getElementById("cardForm").addEventListener("submit", saveFromForm);
@@ -954,8 +1002,12 @@
     document.getElementById("btnCloseKill").addEventListener("click", () => document.getElementById("killModal").close());
     document.getElementById("btnCancelKill").addEventListener("click", () => document.getElementById("killModal").close());
 
-    document.getElementById("btnCloseShop").addEventListener("click", () => document.getElementById("shopModal").close());
-    document.getElementById("btnCloseShop2").addEventListener("click", () => document.getElementById("shopModal").close());
+    // Shopping lives in bottom-nav view; legacy IDs no-op / navigate back to board
+    const closeShop = () => switchView("board");
+    const btnCloseShop = document.getElementById("btnCloseShop");
+    const btnCloseShop2 = document.getElementById("btnCloseShop2");
+    if (btnCloseShop) btnCloseShop.addEventListener("click", closeShop);
+    if (btnCloseShop2) btnCloseShop2.addEventListener("click", closeShop);
     document.getElementById("btnCopyShop").addEventListener("click", async () => {
       const text = document.getElementById("shopList").textContent;
       try {
@@ -965,6 +1017,8 @@
         prompt("Kopieren:", text);
       }
     });
+
+    switchView("board");
   }
 
   init();
