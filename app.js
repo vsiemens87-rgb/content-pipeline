@@ -275,6 +275,8 @@
           ${c.rank != null ? `<span class="chip rank">#${c.rank}</span>` : ""}
           ${c.cutFit ? '<span class="chip ok">cutFit</span>' : ""}
           ${dreh}
+          ${c.timeMinutes != null && c.timeMinutes !== "" ? `<span class="chip">${escapeHtml(String(c.timeMinutes))} Min</span>` : ""}
+          ${c.shootDurationSec != null && c.shootDurationSec !== "" ? `<span class="chip">Drehdauer ${escapeHtml(String(c.shootDurationSec))} Sek</span>` : ""}
           ${c.platformSlot ? `<span class="chip">${escapeHtml(c.platformSlot)}</span>` : ""}
           ${tags}
         </div>
@@ -359,12 +361,12 @@
         <input name="cutFit" type="checkbox" ${card.cutFit ? "checked" : ""} />
         <span>cutFit (PT-Slot passt)</span>
       </label>
-      <label class="field"><span>Zeit (Min)</span>
-        <input name="timeMinutes" type="number" value="${card.timeMinutes ?? ""}" /></label>
+      <label class="field"><span>Kochzeit (Minuten)</span>
+        <input name="timeMinutes" type="number" min="0" step="1" placeholder="Minuten" inputmode="numeric" value="${card.timeMinutes ?? ""}" /></label>
       <label class="field"><span>Schwierigkeit on cam</span>
         <input name="difficultyOnCam" value="${escapeHtml(card.difficultyOnCam || "")}" /></label>
-      <label class="field"><span>Dreh-Dauer (Sek)</span>
-        <input name="shootDurationSec" type="number" value="${card.shootDurationSec ?? ""}" /></label>
+      <label class="field"><span>Drehdauer Video (Sekunden)</span>
+        <input name="shootDurationSec" type="number" min="0" step="1" placeholder="Sekunden" inputmode="numeric" value="${card.shootDurationSec ?? ""}" /></label>
       <label class="field"><span>Post Window</span>
         <input name="postWindow" value="${escapeHtml(card.postWindow || "")}" /></label>
       <label class="field"><span>Perf 48h</span>
