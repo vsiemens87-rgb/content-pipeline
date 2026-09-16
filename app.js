@@ -958,6 +958,7 @@
         mergeWeekFiles([
           "woche-2026-09-14-import.json",
           "woche-2026-09-14-nachzug-quark-import.json",
+          "woche-2026-09-16-schnell-import.json",
         ])
       );
     }
